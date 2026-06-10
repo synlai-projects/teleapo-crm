@@ -1,15 +1,23 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { isStatus } from './constants';
 import * as db from './db';
 import { parseCsv } from './csv';
+import { CALLER_COOKIE, normalizeCaller } from './members';
 import type { Status } from './types';
 
 function text(formData: FormData, key: string): string {
   return String(formData.get(key) ?? '').trim();
+}
+
+// 現在「誰として使っているか」をクッキーから取得する（架電者の記録に使う）
+async function currentCaller(): Promise<string> {
+  const store = await cookies();
+  return normalizeCaller(store.get(CALLER_COOKIE)?.value);
 }
 
 // 新規顧客の登録
@@ -81,6 +89,7 @@ export async function recordCallAction(formData: FormData): Promise<void> {
     result,
     memo: text(formData, 'memo'),
     nextCallDate: nextCallDate ? nextCallDate : null,
+    calledBy: await currentCaller(),
   });
   revalidatePath(`/customers/${customerId}`);
   revalidatePath('/');
@@ -95,7 +104,7 @@ export async function recordMaterialSentAction(customerId: number): Promise<void
   if (!Number.isInteger(customerId)) return;
   const customer = await db.getCustomer(customerId);
   if (!customer) return;
-  await db.addCallLog(customerId, customer.status, '📧 資料を送付しました');
+  await db.addCallLog(customerId, customer.status, '📧 資料を送付しました', await currentCaller());
   revalidatePath(`/customers/${customerId}`);
 }
 

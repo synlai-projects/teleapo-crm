@@ -52,6 +52,7 @@ async function ensureSchema(client: Client): Promise<void> {
       called_at   TEXT NOT NULL DEFAULT (datetime('now', '+9 hours')),
       result      TEXT NOT NULL,
       memo        TEXT NOT NULL DEFAULT '',
+      called_by   TEXT NOT NULL DEFAULT '',
       FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
     );
 
@@ -69,6 +70,13 @@ async function ensureSchema(client: Client): Promise<void> {
   }
   if (!names.includes('email')) {
     await client.execute("ALTER TABLE customers ADD COLUMN email TEXT NOT NULL DEFAULT ''");
+  }
+
+  // call_logs に「誰が架電したか」の called_by 列が無ければ追加する
+  const callLogCols = await client.execute('PRAGMA table_info(call_logs)');
+  const callLogNames = callLogCols.rows.map((r) => r.name as string);
+  if (!callLogNames.includes('called_by')) {
+    await client.execute("ALTER TABLE call_logs ADD COLUMN called_by TEXT NOT NULL DEFAULT ''");
   }
 }
 
@@ -107,6 +115,7 @@ interface CallLogRow {
   called_at: string;
   result: string;
   memo: string;
+  called_by: string;
 }
 
 function toStatus(value: string): Status {
@@ -136,6 +145,7 @@ function mapCallLog(row: CallLogRow): CallLog {
     calledAt: row.called_at,
     result: toStatus(row.result),
     memo: row.memo,
+    calledBy: row.called_by ?? '',
   };
 }
 
@@ -296,14 +306,14 @@ export async function bulkInsertCustomers(items: NewCustomer[]): Promise<number>
 // 架電結果を記録する：履歴に1件追加し、顧客のステータスと次回架電日を更新する
 export async function recordCall(
   customerId: number,
-  data: { result: Status; memo: string; nextCallDate: string | null },
+  data: { result: Status; memo: string; nextCallDate: string | null; calledBy: string },
 ): Promise<void> {
   const db = await getDb();
   await db.batch(
     [
       {
-        sql: "INSERT INTO call_logs (customer_id, called_at, result, memo) VALUES (?, datetime('now', '+9 hours'), ?, ?)",
-        args: [customerId, data.result, data.memo],
+        sql: "INSERT INTO call_logs (customer_id, called_at, result, memo, called_by) VALUES (?, datetime('now', '+9 hours'), ?, ?, ?)",
+        args: [customerId, data.result, data.memo, data.calledBy],
       },
       {
         sql: 'UPDATE customers SET status = ?, next_call_date = ? WHERE id = ?',
@@ -315,11 +325,16 @@ export async function recordCall(
 }
 
 // ステータスを変えずに履歴へ1件だけ追加する（資料送付などの記録用）
-export async function addCallLog(customerId: number, result: Status, memo: string): Promise<void> {
+export async function addCallLog(
+  customerId: number,
+  result: Status,
+  memo: string,
+  calledBy: string,
+): Promise<void> {
   const db = await getDb();
   await db.execute({
-    sql: "INSERT INTO call_logs (customer_id, called_at, result, memo) VALUES (?, datetime('now', '+9 hours'), ?, ?)",
-    args: [customerId, result, memo],
+    sql: "INSERT INTO call_logs (customer_id, called_at, result, memo, called_by) VALUES (?, datetime('now', '+9 hours'), ?, ?, ?)",
+    args: [customerId, result, memo, calledBy],
   });
 }
 

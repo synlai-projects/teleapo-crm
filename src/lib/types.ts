@@ -30,6 +30,7 @@ export interface CallLog {
   calledAt: string; // 架電日時
   result: Status; // 架電結果（＝そのときのステータス）
   memo: string; // 通話メモ
+  calledBy: string; // 架電した担当者名（名前ピッカーで選んだ人）
 }
 
 // 一覧の絞り込み条件
