@@ -1,0 +1,2 @@
+# この空ファイルは data/ ディレクトリを git 上に残すためのものです。
+# SQLite の実ファイル（teleapo.db 等）は .gitignore で除外されます。
