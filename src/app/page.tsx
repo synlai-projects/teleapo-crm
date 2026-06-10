@@ -23,9 +23,11 @@ export default async function Home({ searchParams }: PageProps) {
       params.due === 'today' ? 'today' : params.due === 'overdue' ? 'overdue' : undefined,
   };
 
-  const customers = listCustomers(filter);
-  const industries = listIndustries();
-  const due = countDue();
+  const [customers, industries, due] = await Promise.all([
+    listCustomers(filter),
+    listIndustries(),
+    countDue(),
+  ]);
 
   // 詳細画面に渡して「戻る」「次の顧客」で絞り込みを保持するためのクエリ文字列
   const sp = new URLSearchParams();

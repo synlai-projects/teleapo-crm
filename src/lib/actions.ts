@@ -17,7 +17,7 @@ export async function createCustomerAction(formData: FormData): Promise<void> {
   const company = text(formData, 'company');
   if (!company) return; // 会社名は必須
 
-  db.createCustomer({
+  await db.createCustomer({
     company,
     phone: text(formData, 'phone'),
     contactName: text(formData, 'contactName'),
@@ -37,7 +37,7 @@ export async function updateCustomerAction(formData: FormData): Promise<void> {
   if (!company) return;
 
   const note = text(formData, 'note');
-  db.updateCustomerInfo(id, {
+  await db.updateCustomerInfo(id, {
     company,
     phone: text(formData, 'phone'),
     contactName: text(formData, 'contactName'),
@@ -75,9 +75,9 @@ export async function recordCallAction(formData: FormData): Promise<void> {
   };
 
   // 記録するとソート順が変わるため、先に「次の顧客」を確定しておく
-  const nextId = db.getNextCustomerId(customerId, filter);
+  const nextId = await db.getNextCustomerId(customerId, filter);
 
-  db.recordCall(customerId, {
+  await db.recordCall(customerId, {
     result,
     memo: text(formData, 'memo'),
     nextCallDate: nextCallDate ? nextCallDate : null,
@@ -93,9 +93,9 @@ export async function recordCallAction(formData: FormData): Promise<void> {
 // 資料送付（メール作成画面を開いた）を履歴に残す。ステータスは変えない。
 export async function recordMaterialSentAction(customerId: number): Promise<void> {
   if (!Number.isInteger(customerId)) return;
-  const customer = db.getCustomer(customerId);
+  const customer = await db.getCustomer(customerId);
   if (!customer) return;
-  db.addCallLog(customerId, customer.status, '📧 資料を送付しました');
+  await db.addCallLog(customerId, customer.status, '📧 資料を送付しました');
   revalidatePath(`/customers/${customerId}`);
 }
 
@@ -104,7 +104,7 @@ export async function deleteCustomerAction(formData: FormData): Promise<void> {
   const id = Number(formData.get('id'));
   if (!Number.isInteger(id)) return;
 
-  db.deleteCustomer(id);
+  await db.deleteCustomer(id);
   revalidatePath('/');
   redirect('/');
 }
@@ -134,7 +134,7 @@ export async function importCsvAction(formData: FormData): Promise<void> {
     .filter((item) => item.company !== '');
 
   if (items.length > 0) {
-    db.bulkInsertCustomers(items);
+    await db.bulkInsertCustomers(items);
   }
   revalidatePath('/');
 }

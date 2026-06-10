@@ -1,25 +1,37 @@
 import { mkdirSync } from 'fs';
-import { join } from 'path';
 
-import Database from 'better-sqlite3';
+import { createClient, type Client, type InArgs } from '@libsql/client';
 
 import { isStatus } from './constants';
 import type { CallLog, Customer, CustomerFilter, Status } from './types';
 
 // --- 接続管理 -------------------------------------------------------------
 
-// 開発時のホットリロードで接続が増殖しないよう globalThis にキャッシュする
-const globalForDb = globalThis as unknown as { teleapoDb?: Database.Database };
+// 開発時のホットリロードで接続が増殖しないよう globalThis にキャッシュする。
+// スキーマ初期化（CREATE TABLE 等）は一度だけ走らせたいので Promise もキャッシュする。
+const globalForDb = globalThis as unknown as {
+  teleapoDb?: Client;
+  teleapoInit?: Promise<void>;
+};
 
-function createConnection(): Database.Database {
-  const dataDir = join(process.cwd(), 'data');
-  mkdirSync(dataDir, { recursive: true });
+// ローカル開発では data/teleapo.db を使う。
+// 本番（Turso 等）では TURSO_DATABASE_URL / TURSO_AUTH_TOKEN を設定する。
+function defaultLocalUrl(): string {
+  mkdirSync('data', { recursive: true });
+  return 'file:data/teleapo.db';
+}
 
-  const db = new Database(join(dataDir, 'teleapo.db'));
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+function rawClient(): Client {
+  if (!globalForDb.teleapoDb) {
+    const url = process.env.TURSO_DATABASE_URL ?? defaultLocalUrl();
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+    globalForDb.teleapoDb = createClient({ url, authToken });
+  }
+  return globalForDb.teleapoDb;
+}
 
-  db.exec(`
+async function ensureSchema(client: Client): Promise<void> {
+  await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS customers (
       id             INTEGER PRIMARY KEY AUTOINCREMENT,
       company        TEXT NOT NULL,
@@ -46,26 +58,31 @@ function createConnection(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_call_logs_customer ON call_logs(customer_id);
   `);
 
-  // 既存DBへのマイグレーション：industry / website 列が無ければ追加する
-  const customerCols = db.prepare('PRAGMA table_info(customers)').all() as { name: string }[];
-  if (!customerCols.some((c) => c.name === 'industry')) {
-    db.exec("ALTER TABLE customers ADD COLUMN industry TEXT NOT NULL DEFAULT ''");
+  // 既存DBへのマイグレーション：industry / website / email 列が無ければ追加する
+  const cols = await client.execute('PRAGMA table_info(customers)');
+  const names = cols.rows.map((r) => r.name as string);
+  if (!names.includes('industry')) {
+    await client.execute("ALTER TABLE customers ADD COLUMN industry TEXT NOT NULL DEFAULT ''");
   }
-  if (!customerCols.some((c) => c.name === 'website')) {
-    db.exec("ALTER TABLE customers ADD COLUMN website TEXT NOT NULL DEFAULT ''");
+  if (!names.includes('website')) {
+    await client.execute("ALTER TABLE customers ADD COLUMN website TEXT NOT NULL DEFAULT ''");
   }
-  if (!customerCols.some((c) => c.name === 'email')) {
-    db.exec("ALTER TABLE customers ADD COLUMN email TEXT NOT NULL DEFAULT ''");
+  if (!names.includes('email')) {
+    await client.execute("ALTER TABLE customers ADD COLUMN email TEXT NOT NULL DEFAULT ''");
   }
-
-  return db;
 }
 
-function getDb(): Database.Database {
-  if (!globalForDb.teleapoDb) {
-    globalForDb.teleapoDb = createConnection();
+async function getDb(): Promise<Client> {
+  const client = rawClient();
+  if (!globalForDb.teleapoInit) {
+    // 初期化に失敗したらキャッシュを捨てて次回再試行できるようにする
+    globalForDb.teleapoInit = ensureSchema(client).catch((err) => {
+      globalForDb.teleapoInit = undefined;
+      throw err;
+    });
   }
-  return globalForDb.teleapoDb;
+  await globalForDb.teleapoInit;
+  return client;
 }
 
 // --- 行 → ドメイン型のマッピング ------------------------------------------
@@ -136,9 +153,9 @@ export interface NewCustomer {
   note?: string | null;
 }
 
-export function listCustomers(filter: CustomerFilter = {}): Customer[] {
+export async function listCustomers(filter: CustomerFilter = {}): Promise<Customer[]> {
   const where: string[] = [];
-  const params: string[] = [];
+  const params: InArgs = [];
 
   if (filter.q) {
     where.push('(company LIKE ? OR phone LIKE ? OR contact_name LIKE ?)');
@@ -170,32 +187,33 @@ export function listCustomers(filter: CustomerFilter = {}): Customer[] {
              next_call_date ASC,
              id DESC`;
 
-  const rows = getDb().prepare(sql).all(...params) as CustomerRow[];
-  return rows.map(mapCustomer);
+  const db = await getDb();
+  const rs = await db.execute({ sql, args: params });
+  return rs.rows.map((r) => mapCustomer(r as unknown as CustomerRow));
 }
 
 // 絞り込み用：登録済みの業種（セグメント）一覧
-export function listIndustries(): string[] {
-  const rows = getDb()
-    .prepare("SELECT DISTINCT industry FROM customers WHERE industry <> '' ORDER BY industry")
-    .all() as { industry: string }[];
-  return rows.map((r) => r.industry);
+export async function listIndustries(): Promise<string[]> {
+  const db = await getDb();
+  const rs = await db.execute(
+    "SELECT DISTINCT industry FROM customers WHERE industry <> '' ORDER BY industry",
+  );
+  return rs.rows.map((r) => r.industry as string);
 }
 
-export function getCustomer(id: number): Customer | null {
-  const row = getDb().prepare('SELECT * FROM customers WHERE id = ?').get(id) as
-    | CustomerRow
-    | undefined;
-  return row ? mapCustomer(row) : null;
+export async function getCustomer(id: number): Promise<Customer | null> {
+  const db = await getDb();
+  const rs = await db.execute({ sql: 'SELECT * FROM customers WHERE id = ?', args: [id] });
+  const row = rs.rows[0];
+  return row ? mapCustomer(row as unknown as CustomerRow) : null;
 }
 
-export function createCustomer(data: NewCustomer): number {
-  const info = getDb()
-    .prepare(
-      `INSERT INTO customers (company, phone, contact_name, industry, website, email, status, next_call_date, note, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+9 hours'))`,
-    )
-    .run(
+export async function createCustomer(data: NewCustomer): Promise<number> {
+  const db = await getDb();
+  const rs = await db.execute({
+    sql: `INSERT INTO customers (company, phone, contact_name, industry, website, email, status, next_call_date, note, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+9 hours'))`,
+    args: [
       data.company,
       data.phone,
       data.contactName,
@@ -205,11 +223,12 @@ export function createCustomer(data: NewCustomer): number {
       data.status ?? '未着手',
       data.nextCallDate ?? null,
       data.note ?? null,
-    );
-  return Number(info.lastInsertRowid);
+    ],
+  });
+  return Number(rs.lastInsertRowid);
 }
 
-export function updateCustomerInfo(
+export async function updateCustomerInfo(
   id: number,
   data: {
     company: string;
@@ -220,100 +239,122 @@ export function updateCustomerInfo(
     email: string;
     note: string | null;
   },
-): void {
-  getDb()
-    .prepare(
-      'UPDATE customers SET company = ?, phone = ?, contact_name = ?, industry = ?, website = ?, email = ?, note = ? WHERE id = ?',
-    )
-    .run(data.company, data.phone, data.contactName, data.industry, data.website, data.email, data.note, id);
-}
-
-export function deleteCustomer(id: number): void {
-  getDb().prepare('DELETE FROM customers WHERE id = ?').run(id);
-}
-
-export function bulkInsertCustomers(items: NewCustomer[]): number {
-  const db = getDb();
-  const stmt = db.prepare(
-    `INSERT INTO customers (company, phone, contact_name, industry, website, email, status, next_call_date, note, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+9 hours'))`,
-  );
-  const insertMany = db.transaction((rows: NewCustomer[]) => {
-    for (const row of rows) {
-      stmt.run(
-        row.company,
-        row.phone,
-        row.contactName,
-        row.industry ?? '',
-        row.website ?? '',
-        row.email ?? '',
-        row.status ?? '未着手',
-        row.nextCallDate ?? null,
-        row.note ?? null,
-      );
-    }
+): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: 'UPDATE customers SET company = ?, phone = ?, contact_name = ?, industry = ?, website = ?, email = ?, note = ? WHERE id = ?',
+    args: [
+      data.company,
+      data.phone,
+      data.contactName,
+      data.industry,
+      data.website,
+      data.email,
+      data.note,
+      id,
+    ],
   });
-  insertMany(items);
+}
+
+export async function deleteCustomer(id: number): Promise<void> {
+  const db = await getDb();
+  // FK の ON DELETE CASCADE に依存せず、履歴も明示的に消す（Turso でも確実に動くように）
+  await db.batch(
+    [
+      { sql: 'DELETE FROM call_logs WHERE customer_id = ?', args: [id] },
+      { sql: 'DELETE FROM customers WHERE id = ?', args: [id] },
+    ],
+    'write',
+  );
+}
+
+export async function bulkInsertCustomers(items: NewCustomer[]): Promise<number> {
+  if (items.length === 0) return 0;
+  const db = await getDb();
+  const sql = `INSERT INTO customers (company, phone, contact_name, industry, website, email, status, next_call_date, note, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+9 hours'))`;
+  const stmts = items.map((row) => ({
+    sql,
+    args: [
+      row.company,
+      row.phone,
+      row.contactName,
+      row.industry ?? '',
+      row.website ?? '',
+      row.email ?? '',
+      row.status ?? '未着手',
+      row.nextCallDate ?? null,
+      row.note ?? null,
+    ] as InArgs,
+  }));
+  await db.batch(stmts, 'write');
   return items.length;
 }
 
 // --- 架電 -----------------------------------------------------------------
 
 // 架電結果を記録する：履歴に1件追加し、顧客のステータスと次回架電日を更新する
-export function recordCall(
+export async function recordCall(
   customerId: number,
   data: { result: Status; memo: string; nextCallDate: string | null },
-): void {
-  const db = getDb();
-  const run = db.transaction(() => {
-    db.prepare(
-      "INSERT INTO call_logs (customer_id, called_at, result, memo) VALUES (?, datetime('now', '+9 hours'), ?, ?)",
-    ).run(customerId, data.result, data.memo);
-    db.prepare('UPDATE customers SET status = ?, next_call_date = ? WHERE id = ?').run(
-      data.result,
-      data.nextCallDate,
-      customerId,
-    );
-  });
-  run();
+): Promise<void> {
+  const db = await getDb();
+  await db.batch(
+    [
+      {
+        sql: "INSERT INTO call_logs (customer_id, called_at, result, memo) VALUES (?, datetime('now', '+9 hours'), ?, ?)",
+        args: [customerId, data.result, data.memo],
+      },
+      {
+        sql: 'UPDATE customers SET status = ?, next_call_date = ? WHERE id = ?',
+        args: [data.result, data.nextCallDate, customerId],
+      },
+    ],
+    'write',
+  );
 }
 
 // ステータスを変えずに履歴へ1件だけ追加する（資料送付などの記録用）
-export function addCallLog(customerId: number, result: Status, memo: string): void {
-  getDb()
-    .prepare(
-      "INSERT INTO call_logs (customer_id, called_at, result, memo) VALUES (?, datetime('now', '+9 hours'), ?, ?)",
-    )
-    .run(customerId, result, memo);
+export async function addCallLog(customerId: number, result: Status, memo: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: "INSERT INTO call_logs (customer_id, called_at, result, memo) VALUES (?, datetime('now', '+9 hours'), ?, ?)",
+    args: [customerId, result, memo],
+  });
 }
 
-export function listCallLogs(customerId: number): CallLog[] {
-  const rows = getDb()
-    .prepare('SELECT * FROM call_logs WHERE customer_id = ? ORDER BY called_at DESC, id DESC')
-    .all(customerId) as CallLogRow[];
-  return rows.map(mapCallLog);
+export async function listCallLogs(customerId: number): Promise<CallLog[]> {
+  const db = await getDb();
+  const rs = await db.execute({
+    sql: 'SELECT * FROM call_logs WHERE customer_id = ? ORDER BY called_at DESC, id DESC',
+    args: [customerId],
+  });
+  return rs.rows.map((r) => mapCallLog(r as unknown as CallLogRow));
 }
 
 // --- 集計 -----------------------------------------------------------------
 
-export function countDue(): { today: number; overdue: number } {
-  const db = getDb();
-  const today = db
-    .prepare(
+export async function countDue(): Promise<{ today: number; overdue: number }> {
+  const db = await getDb();
+  const [todayRs, overdueRs] = await db.batch(
+    [
       "SELECT COUNT(*) AS c FROM customers WHERE next_call_date IS NOT NULL AND next_call_date <= date('now', '+9 hours') AND status NOT IN ('NG', 'アポ獲得')",
-    )
-    .get() as { c: number };
-  const overdue = db
-    .prepare(
       "SELECT COUNT(*) AS c FROM customers WHERE next_call_date IS NOT NULL AND next_call_date < date('now', '+9 hours') AND status NOT IN ('NG', 'アポ獲得')",
-    )
-    .get() as { c: number };
-  return { today: today.c, overdue: overdue.c };
+    ],
+    'read',
+  );
+  return {
+    today: Number(todayRs.rows[0].c),
+    overdue: Number(overdueRs.rows[0].c),
+  };
 }
 
 // 一覧の表示順（次回架電日 昇順）で「次の顧客」の ID を返す。末尾なら null
-export function getNextCustomerId(currentId: number, filter: CustomerFilter = {}): number | null {
-  const list = listCustomers(filter);
+export async function getNextCustomerId(
+  currentId: number,
+  filter: CustomerFilter = {},
+): Promise<number | null> {
+  const list = await listCustomers(filter);
   const index = list.findIndex((c) => c.id === currentId);
   if (index === -1) {
     return list.length > 0 ? list[0].id : null;

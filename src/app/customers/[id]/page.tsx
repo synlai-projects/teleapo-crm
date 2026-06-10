@@ -23,7 +23,7 @@ export default async function CustomerDetail({ params, searchParams }: PageProps
   const customerId = Number(id);
   if (!Number.isInteger(customerId)) notFound();
 
-  const customer = getCustomer(customerId);
+  const customer = await getCustomer(customerId);
   if (!customer) notFound();
 
   // 一覧の絞り込みを引き継ぐ（「戻る」「次の顧客」で保持）
@@ -42,8 +42,10 @@ export default async function CustomerDetail({ params, searchParams }: PageProps
   const listQuery = qs.toString();
   const suffix = listQuery ? `?${listQuery}` : '';
 
-  const logs = listCallLogs(customerId);
-  const nextId = getNextCustomerId(customerId, filter);
+  const [logs, nextId] = await Promise.all([
+    listCallLogs(customerId),
+    getNextCustomerId(customerId, filter),
+  ]);
 
   return (
     <div className="detail">
