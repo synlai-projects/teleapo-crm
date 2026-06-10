@@ -5,6 +5,9 @@ import type { Customer } from './types';
 // 件名・本文・署名・リンクはこのファイルを編集すればOK。{会社名}は各社に自動で差し込まれます。
 
 const SERVICE_URL = 'https://synlai.net/services/ai-dev/';
+// 送付資料（PDF）のダウンロードURL。CRMアプリの公開フォルダに配置（ログイン不要で閲覧可）。
+// synlai.net 等に移す場合はこのURLを書き換えるだけ。
+const MATERIAL_PDF_URL = 'https://teleapo-crm.vercel.app/synlai-service-guide.pdf';
 const SUBJECT = '【ご案内】業務システムの受託開発について｜Synlai';
 const RULE = '――――――――――――――――――――';
 
@@ -27,6 +30,10 @@ export function materialMailtoHref(customer: Customer): string {
 具体的なイメージや開発事例は、こちらをご覧ください。
 ▼ AI・業務システムの受託開発（Synlai）
 ${SERVICE_URL}
+
+サービスの詳しいご案内（PDF）もご用意しております。下記からご覧ください。
+▼ Synlai サービスのご案内（PDF）
+${MATERIAL_PDF_URL}
 
 「こんなことはできる？」というご相談だけでも歓迎です。
 本メールへのご返信、またはお電話で、お気軽にお声がけください。

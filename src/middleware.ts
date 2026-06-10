@@ -22,7 +22,8 @@ export async function middleware(req: NextRequest) {
   return NextResponse.redirect(url);
 }
 
-// 静的アセットや画像は対象外。それ以外（ページ・API）はすべてゲート対象。
+// 静的アセットや画像、送付資料PDF（相手はログインしないため）は対象外。
+// それ以外（ページ・API）はすべてゲート対象。
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|synlai-service-guide.pdf).*)'],
 };
