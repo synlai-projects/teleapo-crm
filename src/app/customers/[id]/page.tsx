@@ -7,6 +7,7 @@ import { CustomerEditForm } from '@/components/CustomerEditForm';
 import { DeleteCustomerButton } from '@/components/DeleteCustomerButton';
 import { StatusBadge } from '@/components/StatusBadge';
 import { MaterialSendButton } from '@/components/MaterialSendButton';
+import { TalkScript } from '@/components/TalkScript';
 import { isStatus } from '@/lib/constants';
 import { getCustomer, getNextCustomerId, listCallLogs } from '@/lib/db';
 import type { CustomerFilter } from '@/lib/types';
@@ -76,6 +77,8 @@ export default async function CustomerDetail({ params, searchParams }: PageProps
         )}
         {customer.email && <MaterialSendButton customer={customer} />}
       </div>
+
+      <TalkScript />
 
       <div className="detail-grid">
         <section className="card">
