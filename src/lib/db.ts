@@ -71,6 +71,11 @@ async function ensureSchema(client: Client): Promise<void> {
   if (!names.includes('email')) {
     await client.execute("ALTER TABLE customers ADD COLUMN email TEXT NOT NULL DEFAULT ''");
   }
+  if (!names.includes('owner')) {
+    await client.execute("ALTER TABLE customers ADD COLUMN owner TEXT NOT NULL DEFAULT ''");
+    // 列追加時に一度だけ：既存の全リストは「高田」の担当として割り当てる
+    await client.execute("UPDATE customers SET owner = '高田' WHERE owner = ''");
+  }
 
   // call_logs に「誰が架電したか」の called_by 列が無ければ追加する
   const callLogCols = await client.execute('PRAGMA table_info(call_logs)');
@@ -103,6 +108,7 @@ interface CustomerRow {
   industry: string;
   website: string;
   email: string;
+  owner: string;
   status: string;
   next_call_date: string | null;
   note: string | null;
@@ -131,6 +137,7 @@ function mapCustomer(row: CustomerRow): Customer {
     industry: row.industry,
     website: row.website,
     email: row.email,
+    owner: row.owner,
     status: toStatus(row.status),
     nextCallDate: row.next_call_date,
     note: row.note,
@@ -158,6 +165,7 @@ export interface NewCustomer {
   industry?: string;
   website?: string;
   email?: string;
+  owner?: string;
   status?: Status;
   nextCallDate?: string | null;
   note?: string | null;
@@ -179,6 +187,14 @@ export async function listCustomers(filter: CustomerFilter = {}): Promise<Custom
   if (filter.industry) {
     where.push('industry = ?');
     params.push(filter.industry);
+  }
+  if (filter.owner) {
+    if (filter.owner === '未割当') {
+      where.push("owner = ''");
+    } else {
+      where.push('owner = ?');
+      params.push(filter.owner);
+    }
   }
   if (filter.due === 'today') {
     where.push(
@@ -221,8 +237,8 @@ export async function getCustomer(id: number): Promise<Customer | null> {
 export async function createCustomer(data: NewCustomer): Promise<number> {
   const db = await getDb();
   const rs = await db.execute({
-    sql: `INSERT INTO customers (company, phone, contact_name, industry, website, email, status, next_call_date, note, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+9 hours'))`,
+    sql: `INSERT INTO customers (company, phone, contact_name, industry, website, email, owner, status, next_call_date, note, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+9 hours'))`,
     args: [
       data.company,
       data.phone,
@@ -230,6 +246,7 @@ export async function createCustomer(data: NewCustomer): Promise<number> {
       data.industry ?? '',
       data.website ?? '',
       data.email ?? '',
+      data.owner ?? '',
       data.status ?? '未着手',
       data.nextCallDate ?? null,
       data.note ?? null,
@@ -247,12 +264,13 @@ export async function updateCustomerInfo(
     industry: string;
     website: string;
     email: string;
+    owner: string;
     note: string | null;
   },
 ): Promise<void> {
   const db = await getDb();
   await db.execute({
-    sql: 'UPDATE customers SET company = ?, phone = ?, contact_name = ?, industry = ?, website = ?, email = ?, note = ? WHERE id = ?',
+    sql: 'UPDATE customers SET company = ?, phone = ?, contact_name = ?, industry = ?, website = ?, email = ?, owner = ?, note = ? WHERE id = ?',
     args: [
       data.company,
       data.phone,
@@ -260,6 +278,7 @@ export async function updateCustomerInfo(
       data.industry,
       data.website,
       data.email,
+      data.owner,
       data.note,
       id,
     ],
@@ -281,8 +300,8 @@ export async function deleteCustomer(id: number): Promise<void> {
 export async function bulkInsertCustomers(items: NewCustomer[]): Promise<number> {
   if (items.length === 0) return 0;
   const db = await getDb();
-  const sql = `INSERT INTO customers (company, phone, contact_name, industry, website, email, status, next_call_date, note, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+9 hours'))`;
+  const sql = `INSERT INTO customers (company, phone, contact_name, industry, website, email, owner, status, next_call_date, note, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+9 hours'))`;
   const stmts = items.map((row) => ({
     sql,
     args: [
@@ -292,6 +311,7 @@ export async function bulkInsertCustomers(items: NewCustomer[]): Promise<number>
       row.industry ?? '',
       row.website ?? '',
       row.email ?? '',
+      row.owner ?? '',
       row.status ?? '未着手',
       row.nextCallDate ?? null,
       row.note ?? null,
@@ -349,12 +369,18 @@ export async function listCallLogs(customerId: number): Promise<CallLog[]> {
 
 // --- 集計 -----------------------------------------------------------------
 
-export async function countDue(): Promise<{ today: number; overdue: number }> {
+export async function countDue(owner?: string): Promise<{ today: number; overdue: number }> {
   const db = await getDb();
+  // owner 指定時はそのリスト担当の分だけ数える（'未割当' は owner 空＝未設定）
+  const ownerCond =
+    owner === undefined ? '' : owner === '未割当' ? " AND owner = ''" : ' AND owner = ?';
+  const ownerArgs: InArgs = owner === undefined || owner === '未割当' ? [] : [owner];
+  const base =
+    "SELECT COUNT(*) AS c FROM customers WHERE next_call_date IS NOT NULL AND status NOT IN ('NG', 'アポ獲得')";
   const [todayRs, overdueRs] = await db.batch(
     [
-      "SELECT COUNT(*) AS c FROM customers WHERE next_call_date IS NOT NULL AND next_call_date <= date('now', '+9 hours') AND status NOT IN ('NG', 'アポ獲得')",
-      "SELECT COUNT(*) AS c FROM customers WHERE next_call_date IS NOT NULL AND next_call_date < date('now', '+9 hours') AND status NOT IN ('NG', 'アポ獲得')",
+      { sql: `${base} AND next_call_date <= date('now', '+9 hours')${ownerCond}`, args: ownerArgs },
+      { sql: `${base} AND next_call_date < date('now', '+9 hours')${ownerCond}`, args: ownerArgs },
     ],
     'read',
   );

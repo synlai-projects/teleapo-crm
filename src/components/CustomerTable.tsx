@@ -26,6 +26,7 @@ export function CustomerTable({
         <thead>
           <tr>
             <th>会社名</th>
+            <th>担当</th>
             <th>業種</th>
             <th>電話番号</th>
             <th>ステータス</th>
@@ -39,6 +40,13 @@ export function CustomerTable({
                 <Link href={`/customers/${customer.id}${suffix}`} className="company-link">
                   {customer.company}
                 </Link>
+              </td>
+              <td>
+                {customer.owner ? (
+                  <span className="owner-tag">{customer.owner}</span>
+                ) : (
+                  '—'
+                )}
               </td>
               <td>
                 {customer.industry ? (

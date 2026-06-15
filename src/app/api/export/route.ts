@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 // 全顧客を CSV でダウンロードさせる
 export async function GET(): Promise<Response> {
   const customers = await listCustomers();
-  const header = ['会社名', '電話番号', '担当者名', '業種', 'HP URL', 'メール', 'ステータス', '次回架電日', 'メモ', '登録日時'];
+  const header = ['会社名', '電話番号', '担当者名', '業種', 'HP URL', 'メール', 'リスト担当', 'ステータス', '次回架電日', 'メモ', '登録日時'];
   const rows = customers.map((c) => [
     c.company,
     c.phone,
@@ -14,6 +14,7 @@ export async function GET(): Promise<Response> {
     c.industry,
     c.website,
     c.email,
+    c.owner,
     c.status,
     c.nextCallDate ?? '',
     c.note ?? '',

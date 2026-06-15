@@ -16,7 +16,13 @@ export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ q?: string; status?: string; industry?: string; due?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    status?: string;
+    industry?: string;
+    owner?: string;
+    due?: string;
+  }>;
 }
 
 export default async function CustomerDetail({ params, searchParams }: PageProps) {
@@ -33,12 +39,14 @@ export default async function CustomerDetail({ params, searchParams }: PageProps
     q: sp.q?.trim() || undefined,
     status: sp.status && isStatus(sp.status) ? sp.status : undefined,
     industry: sp.industry?.trim() || undefined,
+    owner: sp.owner?.trim() || undefined,
     due: sp.due === 'today' ? 'today' : sp.due === 'overdue' ? 'overdue' : undefined,
   };
   const qs = new URLSearchParams();
   if (filter.q) qs.set('q', filter.q);
   if (filter.status) qs.set('status', filter.status);
   if (filter.industry) qs.set('industry', filter.industry);
+  if (filter.owner) qs.set('owner', filter.owner);
   if (filter.due) qs.set('due', filter.due);
   const listQuery = qs.toString();
   const suffix = listQuery ? `?${listQuery}` : '';
@@ -63,6 +71,7 @@ export default async function CustomerDetail({ params, searchParams }: PageProps
 
       <div className="detail-head">
         <h1>{customer.company}</h1>
+        {customer.owner && <span className="owner-tag">{customer.owner}</span>}
         {customer.industry && <span className="industry-tag">{customer.industry}</span>}
         <StatusBadge status={customer.status} />
         {customer.website && (

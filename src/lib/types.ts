@@ -17,6 +17,7 @@ export interface Customer {
   industry: string; // 業種・セグメント（製造 / 広告・BPO など）
   website: string; // HP URL（ワンクリックで開く）
   email: string; // メールアドレス（資料送付に使う）
+  owner: string; // リスト担当（このリストを担当する自社メンバー）
   status: Status; // 現在の架電ステータス
   nextCallDate: string | null; // 次回架電日（YYYY-MM-DD）
   note: string | null; // 補足メモ
@@ -38,5 +39,6 @@ export interface CustomerFilter {
   q?: string; // 会社名・電話・担当者のキーワード検索
   status?: Status; // ステータス絞り込み
   industry?: string; // 業種絞り込み
+  owner?: string; // リスト担当で絞り込み（'未割当' で未設定のみ）
   due?: 'today' | 'overdue'; // 今日かける / 期限切れ
 }

@@ -428,6 +428,18 @@ td.overdue {
   color: #b91c1c;
 }
 
+/* --- リスト担当タグ --- */
+.owner-tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
 /* --- 業種タグ --- */
 .industry-tag {
   display: inline-block;

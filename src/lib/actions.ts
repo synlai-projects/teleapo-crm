@@ -32,6 +32,7 @@ export async function createCustomerAction(formData: FormData): Promise<void> {
     industry: text(formData, 'industry'),
     website: text(formData, 'website'),
     email: text(formData, 'email'),
+    owner: text(formData, 'owner') || (await currentCaller()),
   });
   revalidatePath('/');
 }
@@ -52,6 +53,7 @@ export async function updateCustomerAction(formData: FormData): Promise<void> {
     industry: text(formData, 'industry'),
     website: text(formData, 'website'),
     email: text(formData, 'email'),
+    owner: text(formData, 'owner'),
     note: note ? note : null,
   });
   revalidatePath(`/customers/${id}`);
@@ -76,6 +78,7 @@ export async function recordCallAction(formData: FormData): Promise<void> {
     q: sp.get('q')?.trim() || undefined,
     status: isStatus(statusParam) ? statusParam : undefined,
     industry: sp.get('industry')?.trim() || undefined,
+    owner: sp.get('owner')?.trim() || undefined,
     due: (dueParam === 'today' ? 'today' : dueParam === 'overdue' ? 'overdue' : undefined) as
       | 'today'
       | 'overdue'
@@ -119,12 +122,17 @@ export async function deleteCustomerAction(formData: FormData): Promise<void> {
 }
 
 // CSV 取込（列順：会社名・電話・担当者・業種）
+// このリストの担当者（owner）は取込時にプルダウンで選ぶ＝取り込む全社へ一括タグ付け。
+// 未選択なら「あなた」（ログイン中のメンバー）を担当者にする。
 export async function importCsvAction(formData: FormData): Promise<void> {
   const file = formData.get('file');
   if (!(file instanceof File) || file.size === 0) return;
 
   const rows = parseCsv(await file.text());
   if (rows.length === 0) return;
+
+  // このリストの担当者（取込全社に一括で付ける）
+  const owner = text(formData, 'owner') || (await currentCaller());
 
   // 1行目にヘッダらしき語があればスキップ
   const hasHeader = rows[0].some((cell) => /会社|電話|担当|業種|company|phone|name/i.test(cell));
@@ -139,6 +147,7 @@ export async function importCsvAction(formData: FormData): Promise<void> {
       industry: (cols[3] ?? '').trim(),
       website: (cols[4] ?? '').trim(),
       email: (cols[5] ?? '').trim(),
+      owner,
     }))
     .filter((item) => item.company !== '');
 

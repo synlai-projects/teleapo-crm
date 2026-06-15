@@ -1,4 +1,5 @@
 import { updateCustomerAction } from '@/lib/actions';
+import { MEMBERS } from '@/lib/members';
 import type { Customer } from '@/lib/types';
 
 export function CustomerEditForm({ customer }: { customer: Customer }) {
@@ -8,6 +9,17 @@ export function CustomerEditForm({ customer }: { customer: Customer }) {
       <label>
         会社名
         <input type="text" name="company" defaultValue={customer.company} required />
+      </label>
+      <label>
+        リスト担当
+        <select name="owner" defaultValue={customer.owner}>
+          <option value="">（未割当）</option>
+          {MEMBERS.map((member) => (
+            <option key={member} value={member}>
+              {member}
+            </option>
+          ))}
+        </select>
       </label>
       <label>
         電話番号
