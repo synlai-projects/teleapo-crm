@@ -26,26 +26,16 @@ interface PageProps {
 
 export default async function Home({ searchParams }: PageProps) {
   const params = await searchParams;
+  // ヘッダーの「あなた」＝架電者（新規/取込のリスト担当の既定にだけ使う）。
   const caller = normalizeCaller((await cookies()).get(CALLER_COOKIE)?.value);
 
-  // ヘッダーの「あなた」に自動連動：owner未指定なら自分のリストを既定にする。
-  // __all__ を選んだとき・「あなた」未選択のときは全員表示。手動の owner 指定が最優先。
+  // 表示するリストは「担当」絞り込みで選ぶ。架電者（あなた）とは別物
+  // （例：高田のリストを小倉がかける）。件数もこの絞り込みに連動する。
+  // 未指定・__all__ は全員表示。
   const ownerParam = params.owner?.trim() ?? '';
-  let effectiveOwner: string | undefined; // クエリ用（undefined=全員）
-  let ownerValue: string; // 「担当」ドロップダウンの選択値
-  if (ownerParam === OWNER_ALL) {
-    effectiveOwner = undefined;
-    ownerValue = OWNER_ALL;
-  } else if (ownerParam) {
-    effectiveOwner = ownerParam; // メンバー名 or 未割当
-    ownerValue = ownerParam;
-  } else if (caller) {
-    effectiveOwner = caller; // 既定＝自分のリスト
-    ownerValue = caller;
-  } else {
-    effectiveOwner = undefined; // 「あなた」未選択＝全員
-    ownerValue = OWNER_ALL;
-  }
+  const effectiveOwner =
+    ownerParam && ownerParam !== OWNER_ALL ? ownerParam : undefined; // undefined=全員
+  const ownerValue = effectiveOwner ?? OWNER_ALL; // 「担当」ドロップダウンの選択値
 
   const filter: CustomerFilter = {
     q: params.q?.trim() || undefined,
