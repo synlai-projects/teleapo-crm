@@ -300,6 +300,28 @@ export async function deleteCustomer(id: number): Promise<void> {
   );
 }
 
+// リスト担当（owner）ごとに顧客と架電履歴を一括削除する（取込ミスのやり直し用）。削除件数を返す。
+export async function deleteCustomersByOwner(owner: string): Promise<number> {
+  const db = await getDb();
+  const cnt = await db.execute({
+    sql: 'SELECT COUNT(*) AS c FROM customers WHERE owner = ?',
+    args: [owner],
+  });
+  const n = Number(cnt.rows[0].c);
+  if (n === 0) return 0;
+  await db.batch(
+    [
+      {
+        sql: 'DELETE FROM call_logs WHERE customer_id IN (SELECT id FROM customers WHERE owner = ?)',
+        args: [owner],
+      },
+      { sql: 'DELETE FROM customers WHERE owner = ?', args: [owner] },
+    ],
+    'write',
+  );
+  return n;
+}
+
 export async function bulkInsertCustomers(items: NewCustomer[]): Promise<number> {
   if (items.length === 0) return 0;
   const db = await getDb();

@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 
 import { CsvButtons } from '@/components/CsvButtons';
 import { CustomerTable } from '@/components/CustomerTable';
+import { DeleteListButton } from '@/components/DeleteListButton';
 import { FilterBar } from '@/components/FilterBar';
 import { NewCustomerForm } from '@/components/NewCustomerForm';
 import { isStatus } from '@/lib/constants';
@@ -64,6 +65,15 @@ export default async function Home({ searchParams }: PageProps) {
   if (filter.hasContact) sp.set('contact', '1');
   const listQuery = sp.toString();
 
+  // 「担当だけで絞った」状態のときだけ一括削除ボタンを出す（表示件数＝そのownerの全件＝削除件数）
+  const ownerOnly =
+    !!effectiveOwner &&
+    !filter.q &&
+    !filter.status &&
+    !filter.industry &&
+    !filter.due &&
+    !filter.hasContact;
+
   return (
     <div className="stack">
       <div className="toolbar">
@@ -73,7 +83,12 @@ export default async function Home({ searchParams }: PageProps) {
 
       <FilterBar filter={filter} due={due} industries={industries} ownerValue={ownerValue} />
 
-      <p className="result-count">{customers.length} 件</p>
+      <div className="list-head">
+        <p className="result-count">{customers.length} 件</p>
+        {ownerOnly && effectiveOwner && (
+          <DeleteListButton owner={effectiveOwner} count={customers.length} />
+        )}
+      </div>
       <CustomerTable customers={customers} listQuery={listQuery} />
     </div>
   );
