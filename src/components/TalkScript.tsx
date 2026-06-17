@@ -1,10 +1,10 @@
 import { SCRIPT_GOALS, SCRIPT_QA, SCRIPT_STEPS } from '@/lib/talk-script';
 
 // 架電中に参照する固定トークスクリプト（折りたたみカード）。
-// 文言の編集は src/lib/talk-script.ts で行う。
+// 既定は閉じた状態（summary クリックで開く）。文言の編集は src/lib/talk-script.ts で行う。
 export function TalkScript() {
   return (
-    <details className="talk-script" open>
+    <details className="talk-script">
       <summary>📞 トークスクリプト / 想定Q&amp;A</summary>
 
       <ul className="talk-goals">
