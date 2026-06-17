@@ -41,4 +41,5 @@ export interface CustomerFilter {
   industry?: string; // 業種絞り込み
   owner?: string; // リスト担当で絞り込み（'未割当' で未設定のみ）
   due?: 'today' | 'overdue'; // 今日かける / 期限切れ
+  hasContact?: boolean; // 担当者名（先方の人名）が記載済みのものだけ
 }

@@ -196,6 +196,9 @@ export async function listCustomers(filter: CustomerFilter = {}): Promise<Custom
       params.push(filter.owner);
     }
   }
+  if (filter.hasContact) {
+    where.push("contact_name <> ''");
+  }
   if (filter.due === 'today') {
     where.push(
       "next_call_date IS NOT NULL AND next_call_date <= date('now', '+9 hours') AND status NOT IN ('NG', 'アポ獲得')",
@@ -369,7 +372,9 @@ export async function listCallLogs(customerId: number): Promise<CallLog[]> {
 
 // --- 集計 -----------------------------------------------------------------
 
-export async function countDue(owner?: string): Promise<{ today: number; overdue: number }> {
+export async function countDue(
+  owner?: string,
+): Promise<{ today: number; overdue: number; contacted: number }> {
   const db = await getDb();
   // owner 指定時はそのリスト担当の分だけ数える（'未割当' は owner 空＝未設定）
   const ownerCond =
@@ -377,16 +382,19 @@ export async function countDue(owner?: string): Promise<{ today: number; overdue
   const ownerArgs: InArgs = owner === undefined || owner === '未割当' ? [] : [owner];
   const base =
     "SELECT COUNT(*) AS c FROM customers WHERE next_call_date IS NOT NULL AND status NOT IN ('NG', 'アポ獲得')";
-  const [todayRs, overdueRs] = await db.batch(
+  const [todayRs, overdueRs, contactedRs] = await db.batch(
     [
       { sql: `${base} AND next_call_date <= date('now', '+9 hours')${ownerCond}`, args: ownerArgs },
       { sql: `${base} AND next_call_date < date('now', '+9 hours')${ownerCond}`, args: ownerArgs },
+      // 担当者名（先方の人名）が入っている＝受付を抜けて人に当たった件数
+      { sql: `SELECT COUNT(*) AS c FROM customers WHERE contact_name <> ''${ownerCond}`, args: ownerArgs },
     ],
     'read',
   );
   return {
     today: Number(todayRs.rows[0].c),
     overdue: Number(overdueRs.rows[0].c),
+    contacted: Number(contactedRs.rows[0].c),
   };
 }
 

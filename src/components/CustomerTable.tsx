@@ -27,6 +27,7 @@ export function CustomerTable({
           <tr>
             <th>会社名</th>
             <th>担当</th>
+            <th>担当者</th>
             <th>業種</th>
             <th>電話番号</th>
             <th>ステータス</th>
@@ -46,6 +47,13 @@ export function CustomerTable({
                   <span className="owner-tag">{customer.owner}</span>
                 ) : (
                   '—'
+                )}
+              </td>
+              <td>
+                {customer.contactName ? (
+                  <span className="contact-tag">👤 {customer.contactName}</span>
+                ) : (
+                  <span className="muted-dash">—</span>
                 )}
               </td>
               <td>

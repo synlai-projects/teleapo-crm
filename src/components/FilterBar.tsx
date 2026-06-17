@@ -9,7 +9,7 @@ const OWNER_ALL = '__all__';
 
 interface Props {
   filter: CustomerFilter;
-  due: { today: number; overdue: number };
+  due: { today: number; overdue: number; contacted: number };
   industries: string[];
   ownerValue: string; // 「担当」ドロップダウンの選択値（メンバー名 / 未割当 / __all__）
 }
@@ -58,7 +58,10 @@ export function FilterBar({ filter, due, industries, ownerValue }: Props) {
       </form>
 
       <div className="quick-filters">
-        <Link href={`/?${ownerQuery}`} className={!filter.due ? 'chip active' : 'chip'}>
+        <Link
+          href={`/?${ownerQuery}`}
+          className={!filter.due && !filter.hasContact ? 'chip active' : 'chip'}
+        >
           すべて
         </Link>
         <Link
@@ -72,6 +75,12 @@ export function FilterBar({ filter, due, industries, ownerValue }: Props) {
           className={filter.due === 'overdue' ? 'chip active' : 'chip'}
         >
           期限切れ（{due.overdue}）
+        </Link>
+        <Link
+          href={`/?${ownerQuery}&contact=1`}
+          className={filter.hasContact ? 'chip active' : 'chip'}
+        >
+          担当者あり（{due.contacted}）
         </Link>
       </div>
     </div>

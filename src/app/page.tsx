@@ -21,6 +21,7 @@ interface PageProps {
     industry?: string;
     owner?: string;
     due?: string;
+    contact?: string;
   }>;
 }
 
@@ -44,6 +45,7 @@ export default async function Home({ searchParams }: PageProps) {
     owner: effectiveOwner,
     due:
       params.due === 'today' ? 'today' : params.due === 'overdue' ? 'overdue' : undefined,
+    hasContact: params.contact === '1' ? true : undefined,
   };
 
   const [customers, industries, due] = await Promise.all([
@@ -59,6 +61,7 @@ export default async function Home({ searchParams }: PageProps) {
   if (filter.industry) sp.set('industry', filter.industry);
   if (filter.owner) sp.set('owner', filter.owner);
   if (filter.due) sp.set('due', filter.due);
+  if (filter.hasContact) sp.set('contact', '1');
   const listQuery = sp.toString();
 
   return (

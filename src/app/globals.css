@@ -452,6 +452,23 @@ td.overdue {
   color: #6d28d9;
 }
 
+/* 担当者名（先方の人名）が入った行＝受付を抜けて人に当たった温かい先。琥珀色で目立たせる */
+.contact-tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #fef3c7;
+  color: #b45309;
+}
+
+/* 担当者名が未記載の行の「—」は控えめに */
+.muted-dash {
+  color: var(--border);
+}
+
 /* --- サイトリンク（HP をワンクリックで開く） --- */
 .site-link {
   font-size: 13px;
