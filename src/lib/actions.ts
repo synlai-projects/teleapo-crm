@@ -7,7 +7,7 @@ import { redirect } from 'next/navigation';
 import { isStatus } from './constants';
 import * as db from './db';
 import { parseCsv } from './csv';
-import { CALLER_COOKIE, MEMBERS, normalizeCaller } from './members';
+import { CALLER_COOKIE, normalizeCaller } from './members';
 import type { Status } from './types';
 
 function text(formData: FormData, key: string): string {
@@ -18,15 +18,6 @@ function text(formData: FormData, key: string): string {
 async function currentCaller(): Promise<string> {
   const store = await cookies();
   return normalizeCaller(store.get(CALLER_COOKIE)?.value);
-}
-
-// リスト担当（owner）ごとに一括削除する（取込ミスのやり直し用）。
-// 安全装置：登録メンバー以外の値は弾く（全件削除・誤操作防止）。
-export async function deleteOwnerListAction(formData: FormData): Promise<void> {
-  const owner = text(formData, 'owner');
-  if (!owner || !(MEMBERS as readonly string[]).includes(owner)) return;
-  await db.deleteCustomersByOwner(owner);
-  revalidatePath('/');
 }
 
 // 新規顧客の登録

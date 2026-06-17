@@ -469,30 +469,6 @@ td.overdue {
   color: var(--border);
 }
 
-/* 件数と一括削除ボタンを横並びにする見出し行 */
-.list-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-/* リスト一括削除ボタン（危険操作＝赤・確認ダイアログ付き） */
-.danger-button {
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px solid #fecaca;
-  background: #fef2f2;
-  color: #b91c1c;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.danger-button:hover {
-  background: #fee2e2;
-}
-
 /* --- サイトリンク（HP をワンクリックで開く） --- */
 .site-link {
   font-size: 13px;
